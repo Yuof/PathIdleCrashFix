@@ -5,7 +5,13 @@
 
 #include <Windows.h>
 
+#include <algorithm>
+#include <array>
 #include <atomic>
+#include <optional>
+#include <span>
+#include <string_view>
+#include <vector>
 #include <string>
 
 #include "Plugin.h"

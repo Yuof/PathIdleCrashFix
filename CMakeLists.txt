@@ -6,15 +6,12 @@ project(
 	LANGUAGES CXX
 )
 
-set_property(GLOBAL PROPERTY USE_FOLDERS ON)
-
 list(APPEND CMAKE_IGNORE_PATH "${PROJECT_BINARY_DIR}")
 list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/Tools/SKSE-CMakeModules/Modules")
 include(SKSEPlugin)
 
 set(SKSE_USE_XBYAK OFF)
-# ponytail: borrows SSNCF's CommonLib checkout instead of a submodule of its own
-set(SKSE_COMMONLIBSSE_PATH "C:/Code/SCN-Crash-fix/External/CommonLibSSE-NG")
+set(SKSE_COMMONLIBSSE_PATH "External/CommonLibSSE-NG")
 set(BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(ENABLE_SKYRIM_SE ON CACHE BOOL "" FORCE)
 set(ENABLE_SKYRIM_AE ON CACHE BOOL "" FORCE)

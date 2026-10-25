@@ -28,7 +28,6 @@ namespace
 	};
 
 	// the instructions that use the offsets above, identical in 1.6.1170 and 1.7.104
-	// (cache\ingame\pathidle-20261025\selfcheck_verify.py runs the same check on both executables)
 	const std::vector<Expect> kExpect{
 		{ kUpdate, 0xA00, { 0x48, 0x81, 0xC1, 0xF8, 0x00, 0x00, 0x00 }, "Update: lock at +0x110"sv },
 		{ kUpdate, 0xA00, { 0x49, 0x63, 0x86, 0x00, 0x01, 0x00, 0x00 }, "Update: state at +0x118"sv },
@@ -113,7 +112,7 @@ namespace
 SKSEPluginInfo(
 	.Version = Plugin::VERSION,
 	.Name = Plugin::NAME,
-	.Author = "local"sv,
+	.Author = "Yuof"sv,
 	.RuntimeCompatibility = SKSE::VersionIndependence::AddressLibrary)
 
 SKSE_PLUGIN_LOAD(const SKSE::LoadInterface* a_skse)

@@ -4,7 +4,7 @@
 // an actor saved in that state crashes the game right after the load. States 13 and 15 check the same pointer; this
 // gives state 14 that check: without its idle it is reset the way SetPath resets a prepared idle (drop it, state 1).
 // Addresses come from Address Library; the field offsets were read from 1.6.1170 and 1.7.104 (same code there) and are
-// confirmed at load by looking for the instructions that use them - any other build, or a mismatch, stays inactive.
+// confirmed at load by looking for the instructions that use them - a build where they differ stays inactive.
 
 namespace
 {
@@ -121,9 +121,9 @@ SKSE_PLUGIN_LOAD(const SKSE::LoadInterface* a_skse)
 	SKSE::Init(a_skse, { .log = true });
 	const auto version = REL::Module::get().version();
 	logger::info("{} v{} on {}"sv, Plugin::NAME, Plugin::VERSION.string(), version.string());
-	// every Address Library database from 1.6.317 to 1.7.104 has the ids above (ae_ids.txt); SE / VR: not read
-	if (!REL::Module::IsAE() || version < REL::Version{ 1, 6, 317, 0 } || version > REL::Version{ 1, 7, 104, 0 }) {
-		logger::error("not checked for this runtime: inactive"sv);
+	// the ids above are AE ids: SE / VR number theirs differently, and a missing id stops the game in CommonLib's lookup
+	if (!REL::Module::IsAE()) {
+		logger::error("not an AE runtime: inactive"sv);
 		return true;
 	}
 	if (const auto missing = SelfCheck()) {

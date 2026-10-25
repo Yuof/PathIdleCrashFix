@@ -2,16 +2,19 @@
 // MovementAgentPathFollowerStandard state 14 = a start / stop / turn idle is prepared and waits; once the wait ends it
 // enters PlayIdle with the prepared idle unchecked. The agent's SaveGame / LoadGame keep state 14 but not the idle, so
 // an actor saved in that state crashes the game right after the load. States 13 and 15 check the same pointer; this
-// gives state 14 that check: without its idle it goes back to state 1, as when a new path replaces a prepared idle.
-// Offsets read from 1.6.1170: Update 90711, LoadGame 90739, SetPath 90713.
+// gives state 14 that check: without its idle it is reset the way SetPath resets a prepared idle (drop it, state 1).
+// Offsets read from 1.6.1170: Update 90711, LoadGame 90739, SetPath 90713, ClearIdle 90780.
 
 namespace
 {
 	constexpr std::ptrdiff_t kLock = 0x110;      // BSReadWriteLock taken by Update / SetPath / ClearPath
 	constexpr std::ptrdiff_t kState = 0x118;     // std::uint32_t
 	constexpr std::ptrdiff_t kIdleData = 0x130;  // smart pointer to the prepared idle
+	constexpr std::ptrdiff_t kStateObj = 0x148;  // current state object
 	constexpr std::uint32_t  kWaitIdle = 14;
 	constexpr std::uint32_t  kFollowPath = 1;
+
+	REL::Relocation<void (*)(void*)> ClearIdle{ REL::ID(90780) };  // what SetPath calls before it sets state 1
 
 	template <class T>
 	T& At(void* a_agent, std::ptrdiff_t a_off)
@@ -31,7 +34,9 @@ namespace
 				lock.LockForWrite();
 				const bool hit = LostIdle(agent);
 				if (hit) {
+					ClearIdle(agent);
 					At<std::uint32_t>(agent, kState) = kFollowPath;
+					At<void*>(agent, kStateObj) = nullptr;
 				}
 				lock.UnlockForWrite();
 				if (hit) {

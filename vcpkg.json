@@ -1,6 +1,6 @@
 {
   "name": "pathidlecrashfix",
-  "version-string": "1.2.1",
+  "version-string": "1.3.0",
   "description": "SKSE plugin: fixes the crash after loading a save that caught an NPC waiting to play a path idle.",
   "license": "GPL-3.0-or-later",
   "dependencies": [

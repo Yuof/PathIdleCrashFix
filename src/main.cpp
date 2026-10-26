@@ -3,8 +3,9 @@
 // enters PlayIdle with the prepared idle unchecked. The agent's SaveGame / LoadGame keep state 14 but not the idle, so
 // an actor saved in that state crashes the game right after the load. States 13 and 15 check the same pointer; this
 // gives state 14 that check: without its idle it is reset the way SetPath resets a prepared idle (drop it, state 1).
-// Addresses come from Address Library; the field offsets were read from 1.6.1170 and 1.7.104 (same code there) and are
-// confirmed at load by looking for the instructions that use them - a build where they differ stays inactive.
+// Addresses come from Address Library (SE and AE ids); the field offsets were read from 1.5.97, 1.6.1170 and 1.7.104
+// (the same in all three) and are confirmed at load by looking for the instructions that use them - a build where they
+// differ stays inactive.
 
 namespace
 {
@@ -15,19 +16,22 @@ namespace
 	constexpr std::uint32_t  kWaitIdle = 14;
 	constexpr std::uint32_t  kFollowPath = 1;
 
-	constexpr std::uint64_t kUpdate = 90711, kEnterPlayIdle = 90750, kLoadGame = 90739, kClearIdle = 90780;  // AE ids
+	const REL::RelocationID kUpdate{ 88300, 90711 };
+	const REL::RelocationID kEnterPlayIdle{ 88339, 90750 };
+	const REL::RelocationID kLoadGame{ 88328, 90739 };
+	const REL::RelocationID kClearIdle{ 88361, 90780 };
 
 	void (*ClearIdle)(void*) = nullptr;  // what SetPath calls before it sets state 1
 
 	struct Expect
 	{
-		std::uint64_t             id;
+		REL::RelocationID         id;
 		std::size_t               span;
 		std::vector<std::uint8_t> bytes;
 		std::string_view          what;
 	};
 
-	// the instructions that use the offsets above, identical in 1.6.1170 and 1.7.104
+	// the instructions that use the offsets above, identical in 1.5.97, 1.6.1170 and 1.7.104
 	const std::vector<Expect> kExpect{
 		{ kUpdate, 0xA00, { 0x48, 0x81, 0xC1, 0xF8, 0x00, 0x00, 0x00 }, "Update: lock at +0x110"sv },
 		{ kUpdate, 0xA00, { 0x49, 0x63, 0x86, 0x00, 0x01, 0x00, 0x00 }, "Update: state at +0x118"sv },
@@ -37,26 +41,34 @@ namespace
 		{ kLoadGame, 0x330, { 0x89, 0x85, 0x18, 0x01, 0x00, 0x00 }, "LoadGame: state at +0x118"sv },
 	};
 
-	std::span<const std::uint8_t> Code(std::uint64_t a_id, std::size_t a_span)
+	std::span<const std::uint8_t> Code(const REL::RelocationID& a_id, std::size_t a_span)
 	{
-		return { reinterpret_cast<const std::uint8_t*>(REL::ID(a_id).address()), a_span };
+		return { reinterpret_cast<const std::uint8_t*>(a_id.address()), a_span };
 	}
 
-	// state 14's handler: cmp [r14+0x148],0 / jne rel32 / lea rcx,[r14-0x18] / lea rdx,[rsp+imm8] / call EnterPlayIdle
+	// state 14's handler: cmp [r14+0x148],0 / jne rel32 / lea rcx,[r14-0x18] / lea rdx,[rsp+imm8] (AE) or
+	// lea rdx,[rbp+disp8] (SE) / call EnterPlayIdle
 	bool HasState14Handler()
 	{
 		constexpr std::array<std::uint8_t, 10> head{ 0x41, 0x83, 0xBE, 0x48, 0x01, 0x00, 0x00, 0x00, 0x0F, 0x85 };
-		constexpr std::array<std::uint8_t, 8>  tail{ 0x49, 0x8D, 0x4E, 0xE8, 0x48, 0x8D, 0x54, 0x24 };
+		constexpr std::array<std::uint8_t, 4>  leaRcx{ 0x49, 0x8D, 0x4E, 0xE8 };
+		const std::array<std::vector<std::uint8_t>, 2> leaRdx{ { { 0x48, 0x8D, 0x54, 0x24 }, { 0x48, 0x8D, 0x55 } } };
 		const auto code = Code(kUpdate, 0xA00);
-		const auto target = REL::ID(kEnterPlayIdle).address();
+		const auto target = kEnterPlayIdle.address();
 		for (auto it = code.begin(); (it = std::search(it, code.end(), head.begin(), head.end())) != code.end(); ++it) {
 			const auto rest = std::span{ it + head.size() + 4, code.end() };
-			if (rest.size() < tail.size() + 6 || !std::equal(tail.begin(), tail.end(), rest.begin()) || rest[tail.size() + 1] != 0xE8) {
+			if (rest.size() < 16 || !std::equal(leaRcx.begin(), leaRcx.end(), rest.begin())) {
 				continue;
 			}
-			const auto* call = rest.data() + tail.size() + 1;
-			if (reinterpret_cast<std::uintptr_t>(call) + 5 + *reinterpret_cast<const std::int32_t*>(call + 1) == target) {
-				return true;
+			for (const auto& lea : leaRdx) {
+				const auto* p = rest.data() + leaRcx.size();
+				if (!std::equal(lea.begin(), lea.end(), p) || p[lea.size() + 1] != 0xE8) {
+					continue;
+				}
+				const auto* call = p + lea.size() + 1;
+				if (reinterpret_cast<std::uintptr_t>(call) + 5 + *reinterpret_cast<const std::int32_t*>(call + 1) == target) {
+					return true;
+				}
 			}
 		}
 		return false;
@@ -120,16 +132,16 @@ SKSE_PLUGIN_LOAD(const SKSE::LoadInterface* a_skse)
 	SKSE::Init(a_skse, { .log = true });
 	const auto version = REL::Module::get().version();
 	logger::info("{} v{} on {}"sv, Plugin::NAME, Plugin::VERSION.string(), version.string());
-	// the ids above are AE ids: SE / VR number theirs differently, and a missing id stops the game in CommonLib's lookup
-	if (!REL::Module::IsAE()) {
-		logger::error("not an AE runtime: inactive"sv);
+	// SE and AE code was read; VR was not (no VR executable to check its ids and code against)
+	if (REL::Module::IsVR()) {
+		logger::error("VR is not supported: inactive"sv);
 		return true;
 	}
 	if (const auto missing = SelfCheck()) {
 		logger::error("self-check failed ({} not found in this build): inactive"sv, *missing);
 		return true;
 	}
-	ClearIdle = reinterpret_cast<void (*)(void*)>(REL::ID(kClearIdle).address());
+	ClearIdle = reinterpret_cast<void (*)(void*)>(kClearIdle.address());
 	REL::Relocation<std::uintptr_t> vtbl{ RE::VTABLE_MovementAgentPathFollowerStandard[1] };
 	Update::func = vtbl.write_vfunc(2, Update::thunk);
 	logger::info("self-check passed, hooked MovementAgentPathFollowerStandard::Update"sv);
